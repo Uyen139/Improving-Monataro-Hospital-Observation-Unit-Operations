@@ -1,0 +1,516 @@
+---
+title: "Data-Driven Approach To Improving Hospital OU Operations"
+author: "Uyen Tran & Tam Nguyen"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+setwd("~/Desktop/Data Driven Decision Making/Final Project")
+df <- read.csv("OUData.csv") 
+```
+
+```{r}
+summary(df)
+```
+
+```{r}
+str(df)
+```
+# Transform Variable Types
+```{r}
+# Variable Transformation
+df$Gender <- as.factor(df$Gender)
+df$PrimaryInsuranceCategory <- as.factor(df$PrimaryInsuranceCategory)
+df$InitPatientClassAndFirstPostOUClass <- as.factor(df$InitPatientClassAndFirstPostOUClass)
+df$Flipped <- as.factor(df$Flipped)
+df$DRG01 <- as.factor(df$DRG01)
+df$BloodPressureUpper <- as.numeric(df$BloodPressureUpper)
+df$BloodPressureLower <- as.numeric(df$BloodPressureLower)
+df$BloodPressureDiff <- as.numeric(df$BloodPressureDiff)
+df$Pulse <- as.numeric(df$Pulse)
+df$PulseOximetry <- as.numeric(df$PulseOximetry)
+df$Respirations <- as.numeric(df$Respirations)
+df$Temperature <- as.numeric(df$Temperature)
+```
+
+
+```{r}
+# Checking for duplicates
+sum(duplicated(df))
+```
+
+```{r}
+# Check for missing values
+library(kableExtra)
+table.missing<-data.frame(miss.val=sapply(df, function(x)
+  sum(length(which(is.na(x))))))
+table.missing%>%kable(caption = "Number of missing values")%>%kableExtra::kable_styling(bootstrap_options = "striped")
+```
+
+
+## Checking distribution of numerical variables with missing values
+
+```{r}
+#  Histogram of "PulseOximetry" after scaling
+hst <- hist(df$PulseOximetry,
+     main = "Histogram of PulseOximetry",
+     xlab = "PulseOximetry",
+     ylab = "Frequency",
+     col = "lightblue",
+     border = "blue")
+hst
+```
+
+```{r}
+#  Histogram of "Respirations" after scaling
+hst1 <- hist(df$Respirations,
+     main = "Histogram of Respirations",
+     xlab = "Respirations",
+     ylab = "Frequency",
+     col = "lightblue",
+     border = "blue")
+hst1
+```
+
+
+```{r}
+#  Histogram of "BloodPressureUpper" after scaling
+hst3 <- hist(df$BloodPressureUpper,
+     main = "Histogram of BloodPressureUpper",
+     xlab = "BloodPressureUpper",
+     ylab = "Frequency",
+     col = "lightblue",
+     border = "blue")
+hst3
+```
+
+```{r}
+#  Histogram of "Pulse" 
+hst4 <- hist(df$PulseOximetry,
+     main = "Histogram of Pulse",
+     xlab = "Pulse",
+     ylab = "Frequency",
+     col = "lightblue",
+     border = "blue")
+hst4
+```
+
+```{r}
+#  Histogram of "Temperature" 
+hst4 <- hist(df$Temperature,
+     main = "Histogram of Temperature",
+     xlab = "Temperature",
+     ylab = "Frequency",
+     col = "lightblue",
+     border = "blue")
+hst4
+```
+
+### Replace NA with median since the distribution of these variables are skewed
+
+```{r}
+library(dplyr)
+df <- df %>%
+  mutate_at(vars(PulseOximetry, Respirations, BloodPressureDiff, BloodPressureUpper, Pulse, Temperature), ~ifelse(is.na(.), median(., na.rm = TRUE), .))
+
+print(df)
+```
+
+```{r}
+# Checking missing values in all column
+colSums(is.na(df)) > 0
+```
+
+### Remove unuseful columns
+```{r}
+# Remove unuseful variables
+df <- subset(df, select = -c(ObservationRecordKey, InitPatientClassAndFirstPostOUClass))
+df
+```
+
+
+## Data Visualization
+
+
+```{r}
+library(ggplot2)
+# Histogram of Age, colored by Flipped
+ggplot(df, aes(x = Age, fill = Flipped)) +
+  geom_histogram(position = "identity", alpha = 0.9, bins = 20, color = "black") +
+  labs(title = "Distribution of Age by Flipped Status",
+       x = "Age",
+       y = "Frequency") +
+  scale_fill_manual(values = c("white", "navy"), labels = c("Not Flipped", "Flipped")) +
+  theme_minimal()
+```
+
+**DRG code and Flipping Rate**
+```{r}
+# Calculate the proportion of patients flipped to inpatient status by DRG code
+proportion_data <- df %>%
+  group_by(DRG01) %>%
+  summarise(Proportion_Inpatient = mean(Flipped == 1, na.rm = TRUE)) 
+
+# Sort the data by count in descending order to highlight the highest
+proportion_data <- proportion_data %>%
+  arrange(desc(Proportion_Inpatient))
+
+# Reorder DRG01 factor levels based on Proportion_Inpatient
+proportion_data$DRG01 <- factor(proportion_data$DRG01, levels = proportion_data$DRG01)
+
+# Create the bar chart
+ggplot(proportion_data, aes(x = DRG01, y = Proportion_Inpatient)) +
+  geom_bar(stat = "identity", fill = "navy", color = "white") +
+  labs(title = "Proportion of Patients Flipped to Inpatient Status by DRG Code",
+       x = "DRG Code",
+       y = "Proportion of Inpatients") +
+  theme_minimal() +
+  theme(
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+```
+**Box plots**
+```{r}
+library(gridExtra)
+
+# Vital Sign and Flipping Rate
+p1 <- ggplot(df, aes(x = Flipped, y = PulseOximetry)) +
+  geom_boxplot(fill = "navy", color = "black") +
+  labs(title = "Relationship between Pulse Oximetry and Flipping Rate",
+       x = "Inpatient Status",
+       y = "Pulse Oximetry") +
+  theme_minimal() +
+  theme(
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+# Length of Stay and Flipping Rate
+p2 <- ggplot(df, aes(x = Flipped, y = OU_LOS_hrs)) +
+  geom_boxplot(fill = "navy", color = "black") +
+  labs(title = "Relationship between Length of Stay and Flipping Rate",
+       x = "Inpatient Status",
+       y = "Length of Stay") +
+  theme_minimal() +
+  theme(
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+# Blood Pressure Difference and Flipping Rate
+p3 <- ggplot(df, aes(x = Flipped, y = BloodPressureDiff)) +
+  geom_boxplot(fill = "navy", color = "black") +
+  labs(title = "Relationship between Blood Pressure Difference and Flipping Rate",
+       x = "Inpatient Status",
+       y = "Blood Pressure Difference") +
+  theme_minimal() +
+  theme(
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+# Temperature and Flipping Rate
+p4 <- ggplot(df, aes(x = Flipped, y = Temperature)) +
+  geom_boxplot(fill = "navy", color = "black") +
+  labs(title = "Relationship between Temperature and Flipping Rate",
+       x = "Inpatient Status",
+       y = "Temperature") +
+  theme_minimal() +
+  theme(
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+# Arrange the plots 
+grid.arrange(p1, p2, p3, p4, 
+             ncol = 2)
+
+```
+
+
+```{r}
+# Bar chart of count of flipped patient by primary insurance company
+flipped_counts <- df %>% 
+  group_by(PrimaryInsuranceCategory, Flipped) %>%
+  summarise(Count = n()) %>%
+  ungroup()
+
+ggplot(flipped_counts, aes(x=PrimaryInsuranceCategory, y = Count, fill = Flipped)) + 
+  geom_bar(stat = "identity", position = position_dodge(), color = "black") +
+  scale_fill_manual(values = c('white', 'navy'), 
+                    labels = c('Not Flipped', 'Flipped'),
+                    name = "Flipped Status") +
+  labs(x = "Primary Insurance Category", y = "Count", title = "Flipped Status Counts by Primary Insurance Category") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+```
+```{r}
+# Convert Flipped variable to factor to ensure it's treated as categorical
+df$Flipped <- factor(df$Flipped, levels = c(0, 1), labels = c("Not Flipped", "Flipped"))
+
+# Calculate percentage of flipped patients within each primary insurance category
+flipped_percentages <- df %>%
+  group_by(PrimaryInsuranceCategory, Flipped) %>%
+  summarise(Count = n()) %>%
+  mutate(Percentage = (Count / sum(Count)) * 100) 
+
+# Plot bar chart with percentages
+ggplot(flipped_percentages, aes(x = PrimaryInsuranceCategory, y = Percentage, fill = Flipped)) +
+  geom_bar(stat = "identity", position = position_dodge(), color = "black") +
+  geom_text(aes(label = paste0(round(Percentage, 2), "%")), 
+            position = position_dodge(width = 0.9), 
+            vjust = -0.5, 
+            size = 3, 
+            color = "black") +
+  scale_fill_manual(values = c('white', 'navy'), 
+                    labels = c('Not Flipped', 'Flipped'),
+                    name = "Flipped Status") +
+  labs(x = "Primary Insurance Category", 
+       y = "Percentage of Flipped Patients", 
+       title = "Percentage of Flipped Patients by Primary Insurance Category") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 20, hjust = 1)) +
+  theme(
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+```
+
+
+
+```{r}
+# Scatter plot for Pulse Oximetry vs Length of Stay
+ggplot(df, aes(x = OU_LOS_hrs, y = Age)) +
+  geom_point(aes(color = as.factor(Flipped))) +
+  scale_color_manual(values = c("grey", "navy")) +
+  labs(x = "Length of Stay in OU (hours)", y = "Age", 
+       color = "Flipped Status", title = "Age vs Length of Stay") +
+  theme_minimal() +
+  theme(
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+```
+```{r}
+# Calculate the count of flipped status by gender
+gender_flipped <- df %>%
+  group_by(Gender) %>%
+  count(Flipped) %>%
+  mutate(Percentage = n / sum(n))
+
+# Generate the stacked bar chart with percentages
+ggplot(gender_flipped, aes(x = Gender, y = Percentage, fill = as.factor(Flipped))) +
+  geom_bar(stat = "identity", color = "black") +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(values = c('white', 'navy'), 
+                    labels = c('Not Flipped', 'Flipped'),
+                    name = "Flipped Status") +
+  labs(x = "Gender", y = "Percentage", title = "Percentage of Flipped Status by Gender") +
+  theme_minimal() +
+  theme(
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+```
+
+
+**Correlation Matrix of numerical value**
+```{r}
+library(corrplot)
+
+# Select numerical variables
+numerical_vars <- df[, sapply(df, is.numeric)]
+
+# Compute correlation matrix
+correlation_matrix <- cor(numerical_vars)
+
+# Plot heatmap of the correlation matrix
+corrplot(correlation_matrix, method = "color", type = "upper", 
+         addCoef.col = "black", tl.col = "black", tl.srt = 45)
+```
+## Proportion of the dependent variable "FLipped"
+```{r}
+# frequency table
+tbl <- table(df$Flipped)
+round(tbl / nrow(df),2)
+
+# bar chart of frequency for manufacturer
+barplot(tbl,
+        xlab = "1 = Patient flipped from Observation to Inpatient, 0 = Patient stay in Observation",
+        ylab = "frequency",
+        main = "Proportion of non-flipped and flipped patients",
+        col = "navy")
+```
+Both categories are proportional, hence there is no need for oversampling.
+
+# Data Partition
+
+```{r}
+library(caret)
+set.seed(123)
+df$Flipped <- ifelse(df$Flipped == "Flipped", 1,0)
+# Generate random indexs for training and test sets
+train.index <- sample(nrow(df), 0.7*nrow(df))
+test.index <- setdiff(seq_len(nrow(df)), train.index)
+
+# Split the data into training (70%) and testing (30%) sets
+train.df <- df[train.index,]
+test.df <- df[test.index,]
+
+# 
+summary(train.df)
+summary(test.df)
+```
+
+# Logistic Regression
+
+```{r}
+# Full model
+full.model <- glm(Flipped ~ Age + Gender + PrimaryInsuranceCategory + OU_LOS_hrs + DRG01 + BloodPressureUpper + BloodPressureLower + BloodPressureDiff + Pulse + PulseOximetry + Respirations + Temperature, data = train.df, family = "binomial")
+
+# Stepwise Regression Model
+step.model <- step(full.model, direction = "both")
+summary(step.model)
+```
+
+Using Stepwise elimination method, the best model that achieve the lowest AIC is the model that includes 3 independent variables: Age, PrimaryInsuranceCategory and OU_LOS_hrs.
+
+## Evaluating Predictive Performance of the model
+
+```{r}
+pred <- predict(step.model, test.df, type = "response")
+
+# Create a cutoff figure to select the best cutoff value
+accT = c()
+for (cut in seq(0,1,0.1)){
+  cm <- confusionMatrix(factor(ifelse(pred>cut,1,0)), factor(test.df$Flipped))
+  accT = c(accT, cm$overall[1])
+}
+```
+
+```{r}
+plot(accT ~ seq(0,1,0.1),main="Figure: Accuracy and Error Rate at Different Cutoffs", xlab = "Cutoff Value", ylab = "", type = "l", ylim = c(0, 1))
+lines(1-accT ~ seq(0,1,0.1), type = "l", lty = 2, col="blue")
+legend("bottomright", c("accuracy", "overall error"), lty = c(1, 2), merge = TRUE)
+```
+According to the plot, 0.5 is the best cutoff value to achieve maximum accuracy. Hence, we will use 0.5 as our cutoff for the predictive model.
+
+
+```{r}
+# Confusion matrix - cutoff 0.5
+conf.max <- confusionMatrix(factor(ifelse(pred>0.5,1,0)), factor(test.df$Flipped))
+conf.max
+```
+```{r}
+# create ROC 
+library(pROC)
+ROC.logistic <- roc(test.df$Flipped, pred)
+# plot ROC Curve
+plot(ROC.logistic, print.thres = c(0.5))
+
+#AUC
+auc.logistic = ROC.logistic$auc
+auc.logistic
+```
+
+# Classification Tree
+```{r}
+library(rpart)
+library(tidyr)
+default.tree <- rpart(Flipped ~Age + PrimaryInsuranceCategory + OU_LOS_hrs + 
+    DRG01, data = train.df, method = "class")
+default.tree.pred <- predict(default.tree,test.df,type = "class")
+
+library(rpart.plot)
+rpart.plot(default.tree)
+
+# Confusion Matrix
+cfm <- confusionMatrix(default.tree.pred, factor(test.df$Flipped))
+cfm
+
+# Plot confusion matrix with custom colors
+plot(cfm$table, col = c("navy", "white"), main = "Confusion Matrix", 
+     xlab = "Actual", ylab = "Predicted")
+
+```
+-If LOS >= 55, then the patient is classified as **Flipped**
+-Otherwise, If LOS < 55 and DRG = 780,786,787,789, then the patient is predicted as **Non-Flipped**. If this condition is not satisfied, then move on to consider PrimaryInsuranceCategory. If PrimaryInsuranceCategory = Medicaid State or PrimaryInsuranceCategory = Medicare, the patient is predicted as **Non-Flipped**. If this condition is not satisfied, then move on to consider LOS again. If LOS < 26, the patient is predicted as **Non-Flipped**, else the patient is predicted as **Flipped**
+
+
+```{r}
+# ROC curve
+library(ROCR)
+predict.tree.prob = predict(default.tree, newdata = test.df, type = "prob")
+
+# plot ROC and compute AUC
+library(pROC)
+ROC.tree = roc(response = test.df$Flipped, predictor = predict.tree.prob[,2])
+plot(ROC.tree, print.thres = c(0.5))
+auc = ROC.tree$auc
+auc
+```
+
+
+
+
+# Random Forest
+
+```{r}
+library(randomForest)
+rf <- randomForest(Flipped ~ Age + PrimaryInsuranceCategory + OU_LOS_hrs + 
+    DRG01, data = train.df, ntree = 500, mtry = 4, nodesize = 5, importance = TRUE)
+
+# Plotting varible importance
+varImpPlot(rf, type = 1)
+
+
+# Confusion Matrix
+rf.pred <- predict(rf, test.df)
+confusionMatrix(factor(rf.pred), factor(test.df$Flipped))
+```
+
+# Naive Bayes
+```{r}
+library(caret)
+library(e1071)
+
+# Running Naive Bayes
+naive <- naiveBayes(Flipped ~., data = train.df)
+naive
+
+# Predicting probabilities 
+pred.naive.prob <-predict(rt.naive, newdata = test.df, type="raw")
+
+# Predicting class membership
+pred.naive.class <-predict(rt.naive, newdata = test.df)
+```
+
+```{r}
+#Confusion matrix
+confusionMatrix(factor(pred.naive.class), factor(test.df$Flipped))
+```
+
+
+
+
+```{r}
+## Export results to Excel
+#library(openxlsx)
+#write.xlsx(cbind(test.df, predict.tree.prob) , file = "test.xlsx")
+```
+
